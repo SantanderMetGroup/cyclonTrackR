@@ -6,9 +6,6 @@ This package contains two main functions, [getCyclonCenters.R](http://github.com
 
 The recommended installation procedure is to use the `install_github` command from the devtools R package (see the installation info in the wiki):
 
-```r
-devtools::install_github("cyclonTrackR")
-```
 ---
 Reference and further information: 
 
