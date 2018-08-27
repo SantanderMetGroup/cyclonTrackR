@@ -9,4 +9,4 @@ The recommended installation procedure is to use the `install_github` command fr
 ---
 Reference and further information: 
 
-Iparragirre I. (2018) Climate change projections of explosive cyclogenesis events frequency in the Iberian Peninsula.  **Master's Thesis: Physics, Instrumentation and the Environment - Universidad de Cantabria***, http://meteo.unican.es/en/theses/ 
+Iparragirre I. (2018) Climate change projections of explosive cyclogenesis events frequency in the Iberian Peninsula.  **Master's Thesis: Physics, Instrumentation and the Environment - Universidad de Cantabria***, http://meteo.unican.es/en/theses/2018_Itsasne
