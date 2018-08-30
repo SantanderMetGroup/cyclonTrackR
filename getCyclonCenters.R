@@ -1,75 +1,104 @@
-#######################################################################
-#########                DIFERENCIA DE LONGITUD               #########
-#######################################################################
-difLong <- function (xlon1,xlon2){
-  if (is.na(xlon1) | is.na(xlon2)){
-    diflong <- NA
-  }else if (abs(xlon1-xlon2) <= 180.0){
-    diflong <- abs(xlon2 - xlon1)
-  }else if(xlon2 < xlon1){
-    diflong <- abs(xlon2 - xlon1 + 360.0)
-  }else{
-    diflong <- abs(xlon2 - xlon1 - 360.0)
-  }
-  return(diflong)
-}
-######################################################################
-#########                     LAPLACIANO                     #########
-######################################################################
-laplacian <- function (obj){
-  r <- 6378.1 # Earth radius
-  ieqlon <- length(obj$xyCoords$x)
-  jeqlat <- length(obj$xyCoords$y)
-  ## Offset and scale of the data
-  lat <- matrix(data = obj$xyCoords$y, nrow = jeqlat, ncol = ieqlon)
-  long <- t(matrix(data = obj$xyCoords$x, nrow = ieqlon, ncol = jeqlat))
-  ## Auxiliary matrix to obtain the laplacian:
-  meters <- array(data = NA, dim=c(jeqlat,ieqlon,4))
-  for (j in 2:(dim(lat)[2]-1)) {
-    for (i in 2:(dim(lat)[1]-1)) {
-      ## d1 is the lat/lon distance between (i+1,j) and (i,j)
-      d1lon <- difLong(long[i+1,j],long[i,j])*pi*r*cos(lat[i,j]*(2*pi)/360)/180
-      d1lat <- abs((lat[i+1,j]-lat[i,j])*r*(2*pi)/360)
-      ## d2 is the lat/lon distance between (i-1,j) and (i,j)
-      d2lon <- difLong(long[i,j],long[i-1,j])*pi*r*cos(lat[i,j]*(2*pi)/360)/180
-      d2lat <- abs((lat[i,j]-lat[i-1,j])*r*(2*pi)/360)
-      ## d3 is the lat/lon distance between (i,j-1) and (i,j)
-      d3lon <- difLong(long[i,j-1],long[i,j])*pi*r*cos(lat[i,j]*(2*pi)/360)/180
-      d3lat <- abs((lat[i,j-1]-lat[i,j])*r*(2*pi)/360)
-      ## d4 is the lat/lon distance between (i,j+1) and (i,j)
-      d4lon <- difLong(long[i,j],long[i,j+1])*pi*r*cos(lat[i,j]*(2*pi)/360)/180
-      d4lat <- abs((lat[i,j]-lat[i,j+1])*r*(2*pi)/360)
-      ## meters(i,j, ) is distance between the points
-      meters[i,j,1] <- sqrt(d1lat^2 + d1lon^2)
-      meters[i,j,2] <- sqrt(d2lat^2 + d2lon^2)
-      meters[i,j,3] <- sqrt(d3lat^2 + d3lon^2)
-      meters[i,j,4] <- sqrt(d4lat^2 + d4lon^2)
-    }
-  }
-  d1 <- meters[,,1]*(meters[,,1]+meters[,,2])
-  d2 <- meters[,,2]*(meters[,,1]+meters[,,2])
-  d3 <- meters[,,3]*(meters[,,3]+meters[,,4])
-  d4 <- meters[,,4]*(meters[,,3]+meters[,,4])
-  lap <- obj
-  lap$Data[,c(1:2,jeqlat-1,jeqlat),] <- NA
-  lap$Data[,,c(1:2,ieqlon-1,ieqlon)] <- NA
-  zdiff1 <- obj$Data[,5:(jeqlat-2),4:(ieqlon-3)] - obj$Data[,4:(jeqlat-3),4:(ieqlon-3)]
-  zdiff2 <- obj$Data[,3:(jeqlat-4),4:(ieqlon-3)] - obj$Data[,4:(jeqlat-3),4:(ieqlon-3)]
-  zdiff3 <- obj$Data[,4:(jeqlat-3),3:(ieqlon-4)] - obj$Data[,4:(jeqlat-3),4:(ieqlon-3)]
-  zdiff4 <- obj$Data[,4:(jeqlat-3),5:(ieqlon-2)] - obj$Data[,4:(jeqlat-3),4:(ieqlon-3)]
-  for (j in 4:(jeqlat-3)){
-    lap$Data[,j,4:(ieqlon-3)] <- 2*((zdiff1[,j-3,]/d1[j,4:(ieqlon-3)])+(zdiff2[,j-3,]/d2[j,4:(ieqlon-3)])+(zdiff3[,j-3,]/d3[j,4:(ieqlon-3)])+(zdiff4[,j-3,]/d4[j,4:(ieqlon-3)]))
-  }
-  lap$Data[,c(1:3,jeqlat-2,jeqlat-1,jeqlat),] <- NA
-  lap$Data[,,c(1:3,ieqlon-2,ieqlon-1,ieqlon)] <- NA
-  return(lap)
-}
+#     getCyclonCenters.R Algorithm to obtain cyclon centers based on: 
+#                        http://www.europeanwindstorms.org/method/track/
+#
+#     Copyright (C) 2018 Santander Meteorology Group (http://www.meteo.unican.es)
+#
+#     This program is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     This program is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#' @title Cyclon Centers Detection
+#' @description Implementation of an algorithm to detect the cyclon centers
+#'
+#' @param slp Sea Level Pressure (hPa).
+#' @param vo  Relative Vorticity (s-1).
+#' @param seek.radius Maximum distance in degrees to look for a new cyclon center to be included in the same trajectory. The default value is 10.
+#' @param slp.diff.threshold Minimum difference between the slp of a grid box and its neighbours in order to 
+#' be considered a local minimum and, then, a possible cyclon center. The default value is 0.
+#' @param vo.diff.threshold Minimum difference between the vorticity of a grid box and its neighbours in order
+#' to be considered a local minimum and, then, a possible cyclon center. The default value is 0.
+#' @param lap.diff.threshold Minimum difference between the laplacian of the sea level pressure of a grid box 
+#' and its neighbours in order to be considered a local minimum and, then, a possible cyclon center. The default value is 20.
+#' @param ndr.threshold Minimum value of the Normalized Deepeningun Ratio to be considered a cyclon center as explosive. The default value is 2.5.
+#' @param vo.threshold Minimum value of vorticity to be considered a candidate to cyclon center. The default value is 1e-4.
+#' @param wss Wind speed at the same period and geographical domain to be included in the output. The default value is \code{NULL}.
+#' @param criteria Criteria considered to select the cyclon center between the possible candidates. Options implemented are:
+#' \code{"global"} (default): maximum of the Euclidean norm of a vector containing the vorticity, the NDR and the slp normalized;
+#' \code{"max.vo"}: point with the maximum vorticity; \code{"max.ndr"}: point with the maximum NDR; \code{"min.slp"}: point with the minimum slp.
+#'     
+#' @seealso \code{\link{getCyclonTrack}} for the algorithm to define the cyclon tracks from the cyclon centers detected. 
+#' @return A list with the cyclon centers detected for each time step. Each row corresponds to the NDR, slp, vorticity, 
+#' laplacian of the slp, longitude, latitude, windspeed and explosive character of the cyclon center.
+#' @family cyclonTrack
+#'
+#' @references
+#'
+#' \itemize{
+#' \item I. Iparragirre (2018) Climate change projections of explosive cyclogenesis events frequency in the Iberian Peninsula. Master's Thesis: Physics, Instrumentation and the Environment - Universidad de Cantabria, http://meteo.unican.es/en/theses/2018_Itsasne
+#' 
+#' }
+#' @author I. Iparragirre, M. D. Frías, S. Herrera
+#' @export
+#' @examples {
+#' ## We define the geographical and temporal domain to be loaded.
+#' lonLim <- c(-50,40)
+#' latLim <- c(15,75)
+#' r <- 6378.1 # Parameter: Earth radius
+#' season <- 1:12
+#' years <- c(2009:2010)
+#' 
+#' ## We consider the ERA-Interim dataset from the Santander User Data Gateway
+#' dataset <- "http://meteo.unican.es/tds5/dodsC/interim/daily/interim20_daily.ncml"
+#' di <- dataInventory(dataset = dataset)
+#' names(di)
+#' 
+#' ## Sea Level Pressure
+#' slp <- loadGridData(dataset = dataset, var = "SLP", season = season, years = years,
+#'                     lonLim = lonLim, latLim = latLim, time = "none", aggr.d = "none")
+#' ## The input of the algorithm should be expressed in hPa instead Pa:
+#' ao <- c(0,0.01)
+#' slp$Data <- ao[2]*(ao[1]+slp$Data)
+#' 
+#' ## Vorticity at 850 hPa
+#' zg <- loadGridData(dataset = dataset, var = "Z850", season = season, years = years,
+#'                    lonLim = lonLim, latLim = latLim, time = "none", aggr.d = "none")
+#' vo <- laplacian(zg)
+#' rm("zg")
+#' 
+#' ## Detection and Tracking parameters
+#' seek.radius <- 6
+#' slp.diff.threshold <- 10
+#' vo.diff.threshold <- 1e-6
+#' lap.diff.threshold <- 20
+#' ndr.threshold <- 1
+#' vo.threshold <- 1e-5
+#' criteria <- "global"
+#' 
+#' ## Detection and Tracking
+#' varOutputCenters <- getCyclonCenters(slp,vo, seek.radius = seek.radius, slp.diff.threshold = slp.diff.threshold,
+#'                                      vo.diff.threshold = vo.diff.threshold, lap.diff.threshold = lap.diff.threshold,
+#'                                      ndr.threshold = ndr.threshold, vo.threshold = vo.threshold, criteria = criteria)
+#' 
+#' ## Plotting the results
+#' data("wrld")
+#' po <- SpatialPoints(cbind(cyclonTrack[[1]][[2]][,5], cyclonTrack[[1]][[2]][,6]))
+#' dat <- as.data.frame(cyclonTrack[[1]][[2]][,2])
+#' colnames(dat) <- "y"
+#' kl <- SpatialPointsDataFrame(po, data = dat)
+#' spplot(kl, zcol = "y", sp.layout = list(wrld, first = F), colorkey = TRUE, 
+#'               xlim = lonLim, ylim = latLim, xlab = slp$Dates$start[1])
+#'}
 
 
-#######################################################################
-##                     CYCLONE CENTER DETECTION                      ##
-#######################################################################
-## based on: http://www.europeanwindstorms.org/method/track/
 getCyclonCenters <- function(slp,
                               vo,
                               seek.radius = 10,
@@ -230,4 +259,69 @@ getCyclonCenters <- function(slp,
   return(cyclonCenter)
 }
 
-
+#######################################################################
+#########                DIFERENCIA DE LONGITUD               #########
+#######################################################################
+difLong <- function (xlon1,xlon2){
+  if (is.na(xlon1) | is.na(xlon2)){
+    diflong <- NA
+  }else if (abs(xlon1-xlon2) <= 180.0){
+    diflong <- abs(xlon2 - xlon1)
+  }else if(xlon2 < xlon1){
+    diflong <- abs(xlon2 - xlon1 + 360.0)
+  }else{
+    diflong <- abs(xlon2 - xlon1 - 360.0)
+  }
+  return(diflong)
+}
+######################################################################
+#########                     LAPLACIANO                     #########
+######################################################################
+laplacian <- function (obj){
+  r <- 6378.1 # Earth radius
+  ieqlon <- length(obj$xyCoords$x)
+  jeqlat <- length(obj$xyCoords$y)
+  ## Offset and scale of the data
+  lat <- matrix(data = obj$xyCoords$y, nrow = jeqlat, ncol = ieqlon)
+  long <- t(matrix(data = obj$xyCoords$x, nrow = ieqlon, ncol = jeqlat))
+  ## Auxiliary matrix to obtain the laplacian:
+  meters <- array(data = NA, dim=c(jeqlat,ieqlon,4))
+  for (j in 2:(dim(lat)[2]-1)) {
+    for (i in 2:(dim(lat)[1]-1)) {
+      ## d1 is the lat/lon distance between (i+1,j) and (i,j)
+      d1lon <- difLong(long[i+1,j],long[i,j])*pi*r*cos(lat[i,j]*(2*pi)/360)/180
+      d1lat <- abs((lat[i+1,j]-lat[i,j])*r*(2*pi)/360)
+      ## d2 is the lat/lon distance between (i-1,j) and (i,j)
+      d2lon <- difLong(long[i,j],long[i-1,j])*pi*r*cos(lat[i,j]*(2*pi)/360)/180
+      d2lat <- abs((lat[i,j]-lat[i-1,j])*r*(2*pi)/360)
+      ## d3 is the lat/lon distance between (i,j-1) and (i,j)
+      d3lon <- difLong(long[i,j-1],long[i,j])*pi*r*cos(lat[i,j]*(2*pi)/360)/180
+      d3lat <- abs((lat[i,j-1]-lat[i,j])*r*(2*pi)/360)
+      ## d4 is the lat/lon distance between (i,j+1) and (i,j)
+      d4lon <- difLong(long[i,j],long[i,j+1])*pi*r*cos(lat[i,j]*(2*pi)/360)/180
+      d4lat <- abs((lat[i,j]-lat[i,j+1])*r*(2*pi)/360)
+      ## meters(i,j, ) is distance between the points
+      meters[i,j,1] <- sqrt(d1lat^2 + d1lon^2)
+      meters[i,j,2] <- sqrt(d2lat^2 + d2lon^2)
+      meters[i,j,3] <- sqrt(d3lat^2 + d3lon^2)
+      meters[i,j,4] <- sqrt(d4lat^2 + d4lon^2)
+    }
+  }
+  d1 <- meters[,,1]*(meters[,,1]+meters[,,2])
+  d2 <- meters[,,2]*(meters[,,1]+meters[,,2])
+  d3 <- meters[,,3]*(meters[,,3]+meters[,,4])
+  d4 <- meters[,,4]*(meters[,,3]+meters[,,4])
+  lap <- obj
+  lap$Data[,c(1:2,jeqlat-1,jeqlat),] <- NA
+  lap$Data[,,c(1:2,ieqlon-1,ieqlon)] <- NA
+  zdiff1 <- obj$Data[,5:(jeqlat-2),4:(ieqlon-3)] - obj$Data[,4:(jeqlat-3),4:(ieqlon-3)]
+  zdiff2 <- obj$Data[,3:(jeqlat-4),4:(ieqlon-3)] - obj$Data[,4:(jeqlat-3),4:(ieqlon-3)]
+  zdiff3 <- obj$Data[,4:(jeqlat-3),3:(ieqlon-4)] - obj$Data[,4:(jeqlat-3),4:(ieqlon-3)]
+  zdiff4 <- obj$Data[,4:(jeqlat-3),5:(ieqlon-2)] - obj$Data[,4:(jeqlat-3),4:(ieqlon-3)]
+  for (j in 4:(jeqlat-3)){
+    lap$Data[,j,4:(ieqlon-3)] <- 2*((zdiff1[,j-3,]/d1[j,4:(ieqlon-3)])+(zdiff2[,j-3,]/d2[j,4:(ieqlon-3)])+(zdiff3[,j-3,]/d3[j,4:(ieqlon-3)])+(zdiff4[,j-3,]/d4[j,4:(ieqlon-3)]))
+  }
+  lap$Data[,c(1:3,jeqlat-2,jeqlat-1,jeqlat),] <- NA
+  lap$Data[,,c(1:3,ieqlon-2,ieqlon-1,ieqlon)] <- NA
+  return(lap)
+}
