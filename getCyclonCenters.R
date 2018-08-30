@@ -87,15 +87,6 @@
 #' varOutputCenters <- getCyclonCenters(slp,vo, seek.radius = seek.radius, slp.diff.threshold = slp.diff.threshold,
 #'                                      vo.diff.threshold = vo.diff.threshold, lap.diff.threshold = lap.diff.threshold,
 #'                                      ndr.threshold = ndr.threshold, vo.threshold = vo.threshold, criteria = criteria)
-#' 
-#' ## Plotting the results
-#' data("wrld")
-#' po <- SpatialPoints(cbind(cyclonTrack[[1]][[2]][,5], cyclonTrack[[1]][[2]][,6]))
-#' dat <- as.data.frame(cyclonTrack[[1]][[2]][,2])
-#' colnames(dat) <- "y"
-#' kl <- SpatialPointsDataFrame(po, data = dat)
-#' spplot(kl, zcol = "y", sp.layout = list(wrld, first = F), colorkey = TRUE, 
-#'               xlim = lonLim, ylim = latLim, xlab = slp$Dates$start[1])
 #'}
 
 
