@@ -260,7 +260,7 @@ getCyclonCenters <- function(slp,
 }
 
 #######################################################################
-#########                DIFERENCIA DE LONGITUD               #########
+#########               DIFFERENCE OF LONGITUDE               #########
 #######################################################################
 difLong <- function (xlon1,xlon2){
   if (is.na(xlon1) | is.na(xlon2)){
@@ -275,7 +275,7 @@ difLong <- function (xlon1,xlon2){
   return(diflong)
 }
 ######################################################################
-#########                     LAPLACIANO                     #########
+#########                 LAPLACIAN OPERATOR                 #########
 ######################################################################
 laplacian <- function (obj){
   r <- 6378.1 # Earth radius
