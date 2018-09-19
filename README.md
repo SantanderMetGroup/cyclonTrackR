@@ -4,8 +4,8 @@ cyclonTrackR is an R package build on [climate4R bundle](http://www.meteo.unican
 
 This package contains two main functions, [getCyclonCenters.R](http://github.com/SantanderMetGroup/cyclonTrackR/blob/master/getCyclonCenters.R) and [getCyclonTrack.R](http://github.com/SantanderMetGroup/cyclonTrackR/blob/master/getCyclonTrack.R), the first to identify the cyclone centers and the second to define the track using the cyclone centers obtained.
 
-The recommended installation procedure is to use the `install_github` command from the devtools R package (see the installation info in the wiki):
-
+With the support of Biodiversity Foundation of the Ministry for Ecological Transition of Spain. 
+ 
 ---
 Reference and further information: 
 
